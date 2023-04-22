@@ -1,5 +1,6 @@
 import http.server
 import socketserver
+import time
 import webbrowser
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
@@ -25,12 +26,6 @@ auth_manager = SpotifyOAuth(client_id=client_id,
                             scope=scope,
                             open_browser=False)
 
-# Check if access token is in cache
-if not auth_manager.get_cached_token():
-    # Open the authorization URL in the user's web browser
-    auth_url = auth_manager.get_authorize_url()
-    webbrowser.open(auth_url)
-
 # Create a temporary HTTP server to receive the authorization token
 class MyHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -51,31 +46,61 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
         else:
             super().do_GET()
 
-with socketserver.TCPServer(("", 3000), MyHandler) as httpd:
-    print("Listening for incoming requests...")
-    httpd.handle_request()
+# Check if access token is in cache and is still valid
+cached_token = auth_manager.get_cached_token()
+
+# Check if the cached token exists and is not expired
+if not cached_token or int(cached_token['expires_at']) < int(time.time()):
+    # Open the authorization URL in the user's web browser
+    auth_url = auth_manager.get_authorize_url()
+    webbrowser.open(auth_url)
+
+    with socketserver.TCPServer(("", 3000), MyHandler) as httpd:
+        print("Listening for incoming requests...")
+        httpd.handle_request()
+else:
+    access_token = cached_token['access_token']
 
 # Create the Spotify object with authentication
 sp = spotipy.Spotify(auth=access_token)
 
+def get_all_playlists(spotify_instance):
+    playlists = []
+    limit = 50
+    offset = 0
+    while True:
+        response = spotify_instance.current_user_playlists(limit=limit, offset=offset)
+        playlists += response['items']
+        if response['next']:
+            offset += limit
+        else:
+            break
+    return playlists
+
 # Get the user's playlists
-playlists = sp.current_user_playlists()['items']
+playlists = get_all_playlists(sp)
 
 # Ask the user to input a song name
 song_name = input("\nEnter a song name: ")
 
 playlist_count = 0
 
+matching_playlists = []
+
 # Iterate over the user's playlists and check if the song exists in each playlist
 for playlist in playlists:
     playlist_count += 1
+    print(f"Playlist: #{playlist_count}: {playlist['name']}")
     playlist_id = playlist['id']
     playlist_name = playlist['name']
     playlist_tracks = sp.playlist_tracks(playlist_id)['items']
     
     for track in playlist_tracks:
         track_name = track['track']['name']
-        if track_name.lower() == song_name.lower():
-            print(f"The song '{track_name}' is in the playlist '{playlist_name}' which is playlist number {playlist_count}")
-    
+        if song_name.lower() in track_name.lower():
+            matching_playlists.append([playlist_name, playlist_count])
+
+for song in matching_playlists:
+    print(f"Found in playlist: '{song[0]}' which is playlist #{song[1]} in your list")
+
 print()
