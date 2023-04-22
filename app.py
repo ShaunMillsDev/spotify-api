@@ -5,23 +5,31 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import json
 
+# Open and read the configuration file
 with open('config.json', 'r') as f:
-    config = json.load(f)
+    config_data = f.read()
 
-CLIENT_ID = config['client_id']
-CLIENT_SECRET = config['client_secret']
-REDIRECT_URI = config['redirect_uri']
-SCOPE = config['scope']
+# Load the JSON data from the configuration file
+config = json.loads(config_data)
 
-# Set up authentication
-auth_manager = SpotifyOAuth(client_id=CLIENT_ID,
-                            client_secret=CLIENT_SECRET,
-                            redirect_uri=REDIRECT_URI,
-                            scope=SCOPE,)
+# Retrieve the client ID and secret from the config dictionary
+client_id = config['client_id']
+client_secret = config['client_secret']
+redirect_uri = config['redirect_uri']
+scope = config['scope']
 
-# Open the authorization URL in the user's web browser
-auth_url = auth_manager.get_authorize_url()
-webbrowser.open(auth_url)
+# Use the client ID and secret to create a SpotifyOAuth object
+auth_manager = SpotifyOAuth(client_id=client_id,
+                            client_secret=client_secret,
+                            redirect_uri=redirect_uri,
+                            scope=scope,
+                            open_browser=False)
+
+# Check if access token is in cache
+if not auth_manager.get_cached_token():
+    # Open the authorization URL in the user's web browser
+    auth_url = auth_manager.get_authorize_url()
+    webbrowser.open(auth_url)
 
 # Create a temporary HTTP server to receive the authorization token
 class MyHandler(http.server.SimpleHTTPRequestHandler):
